@@ -1,0 +1,525 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vektor Bewegungsanalyse</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        body {
+            background-color: #000000;
+            color: #00ff41; /* Matrix/Radar Green */
+            font-family: 'Courier New', Courier, monospace; /* Tech mono font */
+        }
+        canvas {
+            image-rendering: pixelated;
+        }
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #111;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #003300;
+            border: 1px solid #00ff41;
+        }
+        
+        /* Range Input Styling */
+        input[type=range] {
+            -webkit-appearance: none;
+            background: transparent;
+        }
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 16px;
+            width: 16px;
+            background: #00ff41;
+            margin-top: -6px;
+            box-shadow: 0 0 5px #00ff41;
+        }
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%;
+            height: 4px;
+            background: #004400;
+        }
+    </style>
+</head>
+<body class="h-screen flex flex-col overflow-hidden">
+
+    <!-- Header -->
+    <header class="bg-black border-b border-green-900 p-4 flex justify-between items-center shrink-0 z-20 relative">
+        <div class="flex items-center gap-3">
+            <i data-lucide="radar" class="text-green-500 animate-pulse"></i>
+            <h1 class="text-xl font-bold text-green-500 tracking-widest uppercase">Motion<span class="text-white">Vector</span></h1>
+        </div>
+        <div class="text-xs text-green-800 font-mono">
+            OPTICAL_FLOW_ANALYZER_V1.0
+        </div>
+    </header>
+
+    <!-- Main Layout -->
+    <div class="flex-1 flex flex-col lg:flex-row overflow-hidden relative">
+        
+        <!-- Controls Panel (HUD Style) -->
+        <aside class="w-full lg:w-80 bg-black/90 p-6 overflow-y-auto shrink-0 border-r border-green-900/50 z-10 backdrop-blur-sm">
+            
+            <!-- Status Monitor -->
+            <div class="mb-8 p-4 border border-green-800 bg-green-900/10 font-mono text-xs shadow-[0_0_10px_rgba(0,255,0,0.1)]">
+                <div class="flex justify-between mb-2 border-b border-green-800 pb-1">
+                    <span>SYSTEM_STATUS</span>
+                    <span id="statusIndicator" class="text-red-500">OFFLINE</span>
+                </div>
+                <div class="grid grid-cols-2 gap-2 text-green-600">
+                    <div>VECTORS:</div>
+                    <div id="vectorCount" class="text-right text-green-400">0</div>
+                    <div>FPS:</div>
+                    <div id="fpsCounter" class="text-right text-green-400">0</div>
+                    <div>DELTA:</div>
+                    <div id="deltaDisplay" class="text-right text-green-400">0ms</div>
+                </div>
+            </div>
+
+            <!-- Controls -->
+            <div class="space-y-8 font-mono">
+                
+                <!-- Source -->
+                <div>
+                    <h3 class="text-xs font-bold text-green-700 uppercase mb-2">[ INPUT_SOURCE ]</h3>
+                    <select id="cameraSelect" class="w-full bg-black border border-green-700 text-green-500 text-xs p-2 mb-3 outline-none focus:border-green-400 hidden">
+                        <option value="">DEFAULT_DEVICE</option>
+                    </select>
+
+                    <button id="btnToggle" class="w-full border border-green-500 text-green-500 hover:bg-green-500 hover:text-black text-sm font-bold py-2 px-4 transition-all uppercase tracking-wider flex items-center justify-center gap-2">
+                        <i data-lucide="power"></i> <span>System Start</span>
+                    </button>
+                </div>
+
+                <!-- Parameters -->
+                <div>
+                    <h3 class="text-xs font-bold text-green-700 uppercase mb-4">[ VECTOR_PARAMS ]</h3>
+                    
+                    <!-- Grid Size -->
+                    <div class="mb-5">
+                        <div class="flex justify-between text-xs text-green-600 mb-1">
+                            <span>GRID_DENSITY</span>
+                            <span id="valGrid">20px</span>
+                        </div>
+                        <input type="range" id="gridSize" min="10" max="60" step="5" value="20" class="w-full">
+                    </div>
+
+                    <!-- Sensitivity -->
+                    <div class="mb-5">
+                        <div class="flex justify-between text-xs text-green-600 mb-1">
+                            <span>SENSITIVITY (Threshold)</span>
+                            <span id="valSens">15</span>
+                        </div>
+                        <input type="range" id="sensitivity" min="5" max="100" step="1" value="15" class="w-full">
+                    </div>
+
+                    <!-- Vector Length -->
+                    <div class="mb-5">
+                        <div class="flex justify-between text-xs text-green-600 mb-1">
+                            <span>VECTOR_GAIN (Length)</span>
+                            <span id="valGain">2.0</span>
+                        </div>
+                        <input type="range" id="vectorGain" min="0.5" max="10.0" step="0.5" value="2.0" class="w-full">
+                    </div>
+                </div>
+
+                <!-- Visualization Mode -->
+                <div>
+                    <h3 class="text-xs font-bold text-green-700 uppercase mb-2">[ VIS_MODE ]</h3>
+                    <div class="flex gap-2">
+                        <button class="mode-btn flex-1 border border-green-800 text-green-700 text-xs py-2 hover:bg-green-900/30 data-[active=true]:border-green-400 data-[active=true]:text-green-400 data-[active=true]:bg-green-900/50" data-mode="lines" data-active="true">LINES</button>
+                        <button class="mode-btn flex-1 border border-green-800 text-green-700 text-xs py-2 hover:bg-green-900/30 data-[active=true]:border-green-400 data-[active=true]:text-green-400 data-[active=true]:bg-green-900/50" data-mode="arrows" data-active="false">ARROWS</button>
+                        <button class="mode-btn flex-1 border border-green-800 text-green-700 text-xs py-2 hover:bg-green-900/30 data-[active=true]:border-green-400 data-[active=true]:text-green-400 data-[active=true]:bg-green-900/50" data-mode="dots" data-active="false">DOTS</button>
+                    </div>
+                    
+                    <div class="mt-4 flex items-center gap-2">
+                        <input type="checkbox" id="showVideo" class="accent-green-500 bg-black border-green-700">
+                        <label for="showVideo" class="text-xs text-green-600">OVERLAY_ON_VIDEO</label>
+                    </div>
+                    <div class="mt-2 flex items-center gap-2">
+                         <input type="checkbox" id="trailEffect" class="accent-green-500 bg-black border-green-700" checked>
+                        <label for="trailEffect" class="text-xs text-green-600">TRAIL_PERSISTENCE</label>
+                    </div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Viewport -->
+        <main class="flex-1 bg-black relative flex items-center justify-center overflow-hidden">
+            
+            <!-- Grid Background (Decoration) -->
+            <div class="absolute inset-0 z-0 opacity-10" style="background-image: radial-gradient(#00ff41 1px, transparent 1px); background-size: 40px 40px;"></div>
+
+            <!-- Canvas Container -->
+            <div class="relative z-10 border border-green-900/50 shadow-[0_0_50px_rgba(0,255,0,0.05)] bg-black" style="max-width: 95%; max-height: 95%;">
+                <canvas id="outputCanvas" class="block"></canvas>
+                
+                <!-- Center Crosshair -->
+                <div class="absolute inset-0 pointer-events-none flex items-center justify-center opacity-20">
+                    <div class="w-full h-px bg-green-500 absolute"></div>
+                    <div class="h-full w-px bg-green-500 absolute"></div>
+                    <div class="w-32 h-32 border border-green-500 rounded-full"></div>
+                </div>
+
+                <!-- No Signal Message -->
+                <div id="noSignal" class="absolute inset-0 flex flex-col items-center justify-center bg-black/80 z-20">
+                    <i data-lucide="scan-line" class="w-16 h-16 text-green-900 mb-4"></i>
+                    <p class="text-green-800 font-mono text-sm animate-pulse">NO_SIGNAL_DETECTED</p>
+                </div>
+            </div>
+            
+            <!-- Hidden Video Source -->
+            <video id="webcamVideo" class="hidden" autoplay playsinline muted></video>
+
+        </main>
+    </div>
+
+    <script>
+        // --- Init Icons ---
+        // Initial init for static icons
+        if (typeof lucide !== 'undefined') {
+            lucide.createIcons();
+        } else {
+            window.addEventListener('load', () => lucide && lucide.createIcons());
+        }
+
+        // --- Config & State ---
+        const config = {
+            gridSize: 20,
+            sensitivity: 15,
+            gain: 2.0,
+            mode: 'lines', // lines, arrows, dots
+            showVideo: false,
+            trail: true
+        };
+
+        let stream = null;
+        let isRunning = false;
+        let animationId;
+        
+        let prevFrameData = null; // Buffer for previous frame
+        
+        // --- Elements ---
+        const video = document.getElementById('webcamVideo');
+        const canvas = document.getElementById('outputCanvas');
+        const ctx = canvas.getContext('2d', { willReadFrequently: true });
+        
+        const btnToggle = document.getElementById('btnToggle');
+        const cameraSelect = document.getElementById('cameraSelect');
+        const noSignal = document.getElementById('noSignal');
+        const statusIndicator = document.getElementById('statusIndicator');
+        const vectorCountDisplay = document.getElementById('vectorCount');
+        const fpsDisplay = document.getElementById('fpsCounter');
+        const deltaDisplay = document.getElementById('deltaDisplay');
+        
+        // --- Inputs ---
+        document.getElementById('gridSize').addEventListener('input', (e) => {
+            config.gridSize = parseInt(e.target.value);
+            document.getElementById('valGrid').innerText = config.gridSize + 'px';
+            prevFrameData = null; // Reset buffer on resize
+        });
+
+        document.getElementById('sensitivity').addEventListener('input', (e) => {
+            config.sensitivity = parseInt(e.target.value);
+            document.getElementById('valSens').innerText = config.sensitivity;
+        });
+
+        document.getElementById('vectorGain').addEventListener('input', (e) => {
+            config.gain = parseFloat(e.target.value);
+            document.getElementById('valGain').innerText = config.gain.toFixed(1);
+        });
+
+        document.getElementById('showVideo').addEventListener('change', (e) => config.showVideo = e.target.checked);
+        document.getElementById('trailEffect').addEventListener('change', (e) => config.trail = e.target.checked);
+
+        document.querySelectorAll('.mode-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.mode-btn').forEach(b => {
+                    b.dataset.active = "false";
+                    b.classList.remove('bg-green-900/50');
+                });
+                btn.dataset.active = "true";
+                config.mode = btn.dataset.mode;
+            });
+        });
+
+        cameraSelect.addEventListener('change', () => {
+            if (isRunning) startCamera();
+        });
+
+        btnToggle.addEventListener('click', () => {
+            if (isRunning) stopCamera();
+            else startCamera();
+        });
+
+        // --- Core Logic ---
+
+        async function getDevices() {
+            try {
+                const devices = await navigator.mediaDevices.enumerateDevices();
+                const videoDevices = devices.filter(d => d.kind === 'videoinput');
+                const current = cameraSelect.value;
+                cameraSelect.innerHTML = '';
+                
+                videoDevices.forEach((d, i) => {
+                    const opt = document.createElement('option');
+                    opt.value = d.deviceId;
+                    opt.text = d.label || `CAMERA_DEVICE_${i}`;
+                    cameraSelect.appendChild(opt);
+                });
+
+                if (videoDevices.length > 0) cameraSelect.classList.remove('hidden');
+                if (current && videoDevices.some(d => d.deviceId === current)) cameraSelect.value = current;
+                
+            } catch(e) { console.error(e); }
+        }
+
+        async function startCamera() {
+            stopCamera(); // Stop existing first
+            
+            statusIndicator.innerText = "INITIALIZING...";
+            statusIndicator.className = "text-yellow-500 animate-pulse";
+
+            const constraints = {
+                video: {
+                    width: { ideal: 640 }, // Lower res is fine for vector analysis
+                    height: { ideal: 480 },
+                    deviceId: cameraSelect.value ? { exact: cameraSelect.value } : undefined
+                }
+            };
+
+            try {
+                stream = await navigator.mediaDevices.getUserMedia(constraints);
+                video.srcObject = stream;
+                
+                // Get labels after permission
+                getDevices();
+
+                video.onloadedmetadata = () => {
+                    video.play();
+                    
+                    canvas.width = video.videoWidth;
+                    canvas.height = video.videoHeight;
+                    
+                    isRunning = true;
+                    noSignal.classList.add('hidden');
+                    
+                    statusIndicator.innerText = "ONLINE";
+                    statusIndicator.className = "text-green-500 font-bold shadow-[0_0_10px_#00ff00]";
+                    
+                    // UI Update: Rebuild button content to avoid null references with Lucide
+                    btnToggle.innerHTML = `<i data-lucide="square"></i> <span>SYSTEM HALT</span>`;
+                    btnToggle.classList.add('border-red-500', 'text-red-500', 'hover:bg-red-500');
+                    btnToggle.classList.remove('border-green-500', 'text-green-500', 'hover:bg-green-500');
+                    if (window.lucide) window.lucide.createIcons();
+
+                    requestAnimationFrame(loop);
+                };
+            } catch (err) {
+                console.error(err);
+                statusIndicator.innerText = "ERROR_ACCESS";
+                statusIndicator.className = "text-red-600 font-bold";
+                alert("Camera Access Error: " + err.message);
+            }
+        }
+
+        function stopCamera() {
+            isRunning = false;
+            cancelAnimationFrame(animationId);
+            
+            if (stream) {
+                stream.getTracks().forEach(t => t.stop());
+                stream = null;
+            }
+
+            statusIndicator.innerText = "OFFLINE";
+            statusIndicator.className = "text-red-500";
+            noSignal.classList.remove('hidden');
+
+            // UI Update: Rebuild button content
+            btnToggle.innerHTML = `<i data-lucide="power"></i> <span>SYSTEM START</span>`;
+            btnToggle.classList.remove('border-red-500', 'text-red-500', 'hover:bg-red-500');
+            btnToggle.classList.add('border-green-500', 'text-green-500', 'hover:bg-green-500');
+            if (window.lucide) window.lucide.createIcons();
+            
+            // Clear canvas
+            ctx.clearRect(0,0, canvas.width, canvas.height);
+            prevFrameData = null;
+        }
+
+        // --- Processing Loop ---
+
+        let lastTime = 0;
+        let frameCount = 0;
+        let lastFpsTime = 0;
+
+        function loop(time) {
+            if (!isRunning) return;
+
+            // Stats
+            const delta = time - lastTime;
+            lastTime = time;
+            frameCount++;
+            if (time - lastFpsTime >= 1000) {
+                fpsDisplay.innerText = frameCount;
+                deltaDisplay.innerText = delta.toFixed(1) + 'ms';
+                frameCount = 0;
+                lastFpsTime = time;
+            }
+
+            processVectors();
+            animationId = requestAnimationFrame(loop);
+        }
+
+        function processVectors() {
+            const w = canvas.width;
+            const h = canvas.height;
+            const step = config.gridSize;
+
+            // 1. Draw current video to canvas (or just clear depending on mode)
+            if (config.showVideo) {
+                ctx.globalAlpha = 1.0;
+                ctx.drawImage(video, 0, 0, w, h);
+                // Darken it so vectors pop
+                ctx.fillStyle = 'rgba(0,0,0,0.7)';
+                ctx.fillRect(0,0,w,h);
+            } else {
+                if (config.trail) {
+                    // Fade out effect
+                    ctx.fillStyle = 'rgba(0, 0, 0, 0.2)';
+                    ctx.fillRect(0, 0, w, h);
+                } else {
+                    ctx.clearRect(0, 0, w, h);
+                }
+            }
+
+            // 2. Get current pixel data
+            const tempCanvas = document.createElement('canvas'); // Cheap in memory
+            tempCanvas.width = w; 
+            tempCanvas.height = h;
+            const tempCtx = tempCanvas.getContext('2d', { willReadFrequently: true });
+            tempCtx.drawImage(video, 0, 0, w, h);
+            
+            const currentImageData = tempCtx.getImageData(0, 0, w, h);
+            const data = currentImageData.data;
+
+            // 3. Initialize previous frame if needed
+            if (!prevFrameData || prevFrameData.length !== data.length) {
+                prevFrameData = new Uint8ClampedArray(data);
+                return; // Can't calculate motion on first frame
+            }
+
+            let vectorsFound = 0;
+
+            // Styles for vectors
+            ctx.strokeStyle = '#00ff41'; // Matrix green
+            ctx.fillStyle = '#00ff41';
+            ctx.lineWidth = 1;
+
+            // 4. Grid Iteration
+            for (let y = step; y < h - step; y += step) {
+                for (let x = step; x < w - step; x += step) {
+                    
+                    const i = (y * w + x) * 4;
+
+                    // Calculate brightness (Luma)
+                    // We compare current pixel vs previous pixel to detect IF there is motion
+                    const curLuma = 0.299 * data[i] + 0.587 * data[i+1] + 0.114 * data[i+2];
+                    const prevLuma = 0.299 * prevFrameData[i] + 0.587 * prevFrameData[i+1] + 0.114 * prevFrameData[i+2];
+
+                    const diff = curLuma - prevLuma;
+
+                    // Only process if movement is significant (Threshold)
+                    if (Math.abs(diff) > config.sensitivity) {
+                        vectorsFound++;
+
+                        // Determine Direction (Simplified Optical Flow)
+                        // We look at the spatial gradient (contrast edges) in the current image.
+                        
+                        // Calculate Spatial Gradients (Sobel-ish but simple neighbors)
+                        // Gx = right - left
+                        const iRight = (y * w + (x + 2)) * 4; // look slightly wider for stability
+                        const iLeft = (y * w + (x - 2)) * 4;
+                        const gx = (0.299 * data[iRight] + 0.587 * data[iRight+1]) - 
+                                   (0.299 * data[iLeft] + 0.587 * data[iLeft+1]);
+
+                        // Gy = down - up
+                        const iDown = ((y + 2) * w + x) * 4;
+                        const iUp = ((y - 2) * w + x) * 4;
+                        const gy = (0.299 * data[iDown] + 0.587 * data[iDown+1]) - 
+                                   (0.299 * data[iUp] + 0.587 * data[iUp+1]);
+
+                        // Normalize gradient magnitude
+                        const gMag = Math.sqrt(gx*gx + gy*gy);
+                        
+                        if (gMag > 5) { // avoid division by zero or noise
+                            // Project the temporal difference onto the spatial gradient
+                            // Invert X/Y depending on gradient sign logic to point in movement direction
+                            // Usually: Vector points towards where brightness IS going
+                            const vx = -(gx / gMag) * diff * config.gain;
+                            const vy = -(gy / gMag) * diff * config.gain;
+
+                            drawVector(ctx, x, y, vx, vy, config.mode);
+                        }
+                    }
+                }
+            }
+
+            // Update stats
+            vectorCountDisplay.innerText = vectorsFound;
+
+            // Update previous frame buffer
+            prevFrameData.set(data);
+        }
+
+        function drawVector(ctx, x, y, vx, vy, mode) {
+            // Limit crazy long vectors
+            const maxLen = 50;
+            if (vx > maxLen) vx = maxLen; if (vx < -maxLen) vx = -maxLen;
+            if (vy > maxLen) vy = maxLen; if (vy < -maxLen) vy = -maxLen;
+
+            if (mode === 'dots') {
+                ctx.beginPath();
+                ctx.arc(x + vx, y + vy, 2, 0, Math.PI * 2);
+                ctx.fill();
+            } else if (mode === 'lines') {
+                ctx.beginPath();
+                ctx.moveTo(x, y);
+                ctx.lineTo(x + vx, y + vy);
+                ctx.stroke();
+            } else if (mode === 'arrows') {
+                const toX = x + vx;
+                const toY = y + vy;
+                
+                ctx.beginPath();
+                ctx.moveTo(x, y);
+                ctx.lineTo(toX, toY);
+                ctx.stroke();
+
+                // Arrow head
+                const angle = Math.atan2(vy, vx);
+                const headLen = 4;
+                ctx.beginPath();
+                ctx.moveTo(toX, toY);
+                ctx.lineTo(toX - headLen * Math.cos(angle - Math.PI / 6), toY - headLen * Math.sin(angle - Math.PI / 6));
+                ctx.moveTo(toX, toY);
+                ctx.lineTo(toX - headLen * Math.cos(angle + Math.PI / 6), toY - headLen * Math.sin(angle + Math.PI / 6));
+                ctx.stroke();
+            }
+        }
+
+        // Init Devices on load if permission exists
+        navigator.mediaDevices.enumerateDevices().then(devices => {
+           if(devices.some(d => d.label !== '')) getDevices();
+        });
+
+    </script>
+</body>
+</html>
